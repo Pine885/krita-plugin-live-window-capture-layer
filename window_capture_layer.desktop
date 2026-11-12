@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=Krita/PythonPlugin
+X-KDE-Library=window_capture_layer
+X-Python-2-Compatible=false
+Name=Window Capture Layer
+Comment=Capture X11 windows into Krita paint layers from a docker.
