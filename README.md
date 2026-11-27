@@ -1,131 +1,51 @@
 # Window Capture Layer
 
-Krita docker that captures application windows into paint layers. Several
-capture sessions can run at once, each writing to its own layer. A docker lists the
-sessions of the active document, so switching document tabs switches the list.
-A second Krita main window is intended to have its own independent docker and
-session list; this is untested.
-Deleting a capture layer deletes its session instance. Each capture layer gets
-a transform mask; use it to move or scale the capture.
+Capture application windows into per-document Krita paint layers from the **Window Capture** docker.
 
-Version 0.8.0 (stable). Requires Krita 5.x (PyQt5; PyQt6 fallback, untested).
-On Linux it needs an X11 session and `xdotool`. On Windows no extra tools are
-needed.
+Supports Krita 5.x (PyQt5) and 6.x (PyQt6). Linux requires X11 and `xdotool`; Windows requires no extra tools.
 
 ## Install
 
-1. In Krita: Tools > Scripts > Import Python Plugin from File...
-2. Select `window-capture-layer.zip`.
-3. Restart Krita.
-4. Enable **Window Capture Layer** in
-   Settings > Configure Krita > Python Plugin Manager.
-5. Restart Krita again.
+1. **Tools > Scripts > Import Python Plugin from File...** and select `window-capture-layer.zip`.
+2. Restart Krita.
+3. **Settings > Configure Krita > Python Plugin Manager** — enable **Window Capture Layer**.
+4. Restart Krita.
 
 ## Docker
 
-**Window Capture** docker (right dock):
+Sessions are scoped to the active document, saved with it, and restored as `paused` (`✗`) on reopen.
 
-```text
-@
-Window
-[window combo] [add] [choose]
+- **@:** Shows instructions, credits, capture backend status, dependencies, recent warnings, and (on Windows) log-reporting steps.
+- **Window & choose:** Combo re-scans visible windows (largest first) on open; **choose** blocks the docker for up to 30 s until you click a window.
+- **add:** Creates a `Window capture XXXX` layer with a child transform mask. Live sessions update when Krita regains focus (no background timer).
+- **refresh / refresh all:** Captures selected or all document sessions now (paused sessions stay paused).
+- **toggle / toggle all:** Pauses or resumes the selected session, or pauses all if any are running / starts stopped sessions otherwise.
+- **apply:** Removes the session from the docker and document save data while keeping the layer in Krita.
 
-[session table]
+**States:** `active` (`✓`), `paused` (`✗`), `lost` (`!`, window missing; retried on focus-in or start), `error` (`⚠`, invalid document/layer or write failure).
 
-[refresh] [refresh all] [toggle] [toggle all] [apply]
-[status]
-```
+### Transform Workflow
 
-- **@** (top left) shows quick instructions, credits, the capture method in use,
-  dependency status, and any recent capture warnings. On Windows it also shows a
-  short guide for reporting capture problems.
-- The **Window** combo re-scans visible windows (largest first) every time its
-  popup opens. **choose** waits up to 30 s for you to click the wanted window;
-  the docker is blocked until you click or the wait ends.
-- **add** creates a layer named `Window capture XXXX`. Live sessions capture one
-  frame when Krita becomes the active application; there is no periodic timer.
-  Switch away and back to refresh the captured window.
-- Table columns: layer, window title, state. Long titles are shortened; hover
-  to see the full title. State uses a mark: `✓` running, `✗` paused, `!` lost,
-  `⚠` error. Hover the mark for the full state and any error text.
-- **refresh** captures the selected session now, including a paused one; it
-  stays paused. **refresh all** captures every session of the active document,
-  including paused ones; paused ones stay paused.
-- **toggle** starts or pauses the selected session. **toggle all** pauses every
-  session when anything is running, otherwise starts every stopped session.
-  **apply** detaches the selected session: it disappears from the table and is
-  no longer saved with the document, but its capture layer stays in the Layers
-  panel, disconnected from the plugin. The table stretches with the docker
-  width.
+Select the capture layer's **Transform Mask** and use Krita's Transform tool there. Captures overwrite raw layer pixels directly and never touch masks.
 
-States: `active`, `paused`, `lost` (window gone; retried on the next Krita
-focus-in or explicit start), `error` (unsupported document, missing layer, or a
-failed write).
+## Actions (`Tools > Scripts`)
 
-Sessions are stored per document and restored as `paused` when the document is
-reopened. The table shows only sessions for the active document. Deleting a
-session's layer removes that session instance and its saved entry. **apply**
-drops only the row and saved entry, keeping the layer for normal painting.
-Renaming the layer keeps it linked. A
-restored session whose layer is missing shows `layer missing`; **toggle** retries
-the lookup. Tools > Scripts actions use the docker manager for the active
-document.
-
-### Transform workflow
-
-New capture layers already have a transform mask. Select it in the Layers panel
-and use Krita's Transform tool on the mask. The plugin only writes raw pixels to
-the capture layer, never to masks, so mask transformations survive updates. Use
-the mask rather than the Move tool on the layer itself.
-
-## Actions (Tools > Scripts)
-
-| Action | What it does |
+| Action | Behavior |
 | --- | --- |
-| Capture Window to New Layer | Prompt for a title substring, capture the largest match once. |
-| Toggle Live Window Capture | Pause all active sessions, or add a new one. |
-| Insert Channel Test Pattern | Red / green / blue / white bands from known RGBA bytes. |
+| **Capture Window to New Layer** | Prompts for a title substring and captures the largest matching window once. |
+| **Toggle Live Window Capture** | Pauses active sessions, or prompts to add and start a new one. |
+| **Insert Channel Test Pattern** | Writes red, green, blue, and white RGBA bands to verify channel order. |
 
-## Limits
+## Limits & Caveats
 
-At most 8 sessions, 4K UHD maximum window size (larger windows are skipped,
-never truncated). Live sessions capture on Krita focus-in, not on a timer; lost
-windows are retried on the next focus-in or manual start.
-
-## Known limits
-
-- Linux: X11 only. Wayland is not supported; window capture returns a null
-  image there. The plugin redirects the window itself, so occluded windows are
-  captured even without a running compositor; Qt's capture is the fallback when
-  the XComposite path is unavailable or the image layout is unsupported.
-- Windows: captures the client area without the title bar. Covered windows keep
-  updating for most applications, but some hardware-accelerated apps can render
-  black; those need a different capture method and are a known gap.
-- When the native capture path is unavailable, or a window renders black, the
-  plugin falls back to Qt's capture and the **@** dialog lists the reason. The
-  Qt fallback only sees on-screen pixels, so a covered window can capture
-  whatever overlaps it.
-- RGBA / U8 documents only; no color space conversion. Other documents are
-  rejected with a session error.
-- Captures are not undoable. The document is marked modified so the save prompt
-  appears.
-- One refresh per focus-in per touched document; many large sessions capture as
-  a single burst when Krita regains focus.
-- Avoid painting on a live capture layer: a capture may overwrite pixels during
-  an open stroke.
-- Window frames are written at full size, cropped only by the canvas bounds.
+- **Limits:** Up to 8 sessions; windows larger than 4K UHD (`3840x2160`) are skipped.
+- **Document format:** `RGBA` / `U8` only (no color-space conversion).
+- **Undo & painting:** Captures mark the document modified, are not undoable, and can overwrite live capture layers mid-stroke.
+- **Linux (X11):** Wayland is unsupported. Uses XComposite window redirection (works without a compositor and captures occluded windows), falling back to Qt window grab when unavailable.
+- **Windows:** Captures client area without title bars. Some hardware-accelerated windows render black natively and fall back to Qt (which captures visible on-screen pixels, including overlaps).
 
 ## Troubleshooting
 
-- The **@** dialog says the native capture path is unavailable: the plugin is
-  already using Qt's fallback. To force that comparison, set
-  `WINDOW_CAPTURE_LAYER_NATIVE=0` before starting Krita.
-- The **@** dialog says `xdotool not found`: install it and restart Krita.
-  - Debian/Ubuntu: `sudo apt install xdotool`
-  - Arch: `sudo pacman -S xdotool`
-  - Fedora: `sudo dnf install xdotool`
-  Without `xdotool`, the window list and **choose** button cannot work.
-- To collect a log for a bug report, set `WINDOW_CAPTURE_LAYER_DEBUG=1` (INFO)
-  or `WINDOW_CAPTURE_LAYER_DEBUG=2` (verbose), and
-  `WINDOW_CAPTURE_LAYER_LOG=<path>` to write to a file instead of the terminal.
-  On Windows set them in the Command Prompt before starting Krita.
+- **Native capture unavailable / black frame:** Uses Qt fallback automatically. Force comparison with `WINDOW_CAPTURE_LAYER_NATIVE=0` before launching Krita.
+- **`xdotool not found` (Linux):** Install `xdotool` (`apt install xdotool`, `pacman -S xdotool`, or `dnf install xdotool`) and restart Krita.
+- **Debug logs:** Set `WINDOW_CAPTURE_LAYER_DEBUG=1` (`INFO`) or `2` (`DEBUG`), and optionally `WINDOW_CAPTURE_LAYER_LOG=<path>`, before starting Krita.
